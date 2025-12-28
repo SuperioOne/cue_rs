@@ -1,0 +1,156 @@
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UnknownFileType;
+
+impl core::fmt::Display for UnknownFileType {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.write_str("unknown file type")
+  }
+}
+
+impl core::error::Error for UnknownFileType {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InvalidNumericRange;
+
+impl core::fmt::Display for InvalidNumericRange {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.write_str("numeric range is invalid")
+  }
+}
+
+impl core::error::Error for InvalidNumericRange {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DigitsParseError;
+
+impl core::fmt::Display for DigitsParseError {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.write_str("failed to parse digits")
+  }
+}
+
+impl core::error::Error for DigitsParseError {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DataTypeParseError;
+
+impl core::fmt::Display for DataTypeParseError {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.write_str("failed to parse data type")
+  }
+}
+
+impl core::error::Error for DataTypeParseError {}
+
+/// Represents an error when parsing a timestamp.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TimeStampParseError {
+  kind: TimeStampParseErrorKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FlagParseError;
+
+impl core::fmt::Display for FlagParseError {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.write_str("failed to parse flag")
+  }
+}
+
+impl core::error::Error for FlagParseError {}
+
+impl TimeStampParseError {
+  #[inline]
+  pub const fn new(kind: TimeStampParseErrorKind) -> Self {
+    Self { kind }
+  }
+
+  #[inline]
+  pub const fn kind(&self) -> TimeStampParseErrorKind {
+    self.kind
+  }
+}
+
+/// Kinds of errors that can occur while parsing a timestamp.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TimeStampParseErrorKind {
+  /// The timestamp has an invalid length.
+  InvalidLength,
+  /// A character in the timestamp is not valid.
+  InvalidCharacter,
+  /// The minute value is invalid.
+  InvalidMinute,
+  /// The second value is invalid.
+  InvalidSecond,
+  /// The frame value is invalid.
+  InvalidFrame,
+}
+
+impl core::fmt::Display for TimeStampParseErrorKind {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    match self {
+      TimeStampParseErrorKind::InvalidLength => f.write_str("timestamp length is incorrect"),
+      TimeStampParseErrorKind::InvalidCharacter => {
+        f.write_str("timestamp contains invalid character")
+      }
+      TimeStampParseErrorKind::InvalidMinute => f.write_str("timestamp minute is invalid"),
+      TimeStampParseErrorKind::InvalidSecond => f.write_str("timestamp second is invalid"),
+      TimeStampParseErrorKind::InvalidFrame => f.write_str("timestamp frame is invalid"),
+    }
+  }
+}
+
+impl core::fmt::Display for TimeStampParseError {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.write_fmt(format_args!("invalid timestamp: {}", self.kind))
+  }
+}
+
+impl core::error::Error for TimeStampParseError {}
+
+/// Represents an error when parsing a cue string.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CueStrError {
+  kind: CueStrErrorKind,
+}
+
+impl CueStrError {
+  #[inline]
+  pub const fn new(kind: CueStrErrorKind) -> Self {
+    Self { kind }
+  }
+
+  #[inline]
+  pub const fn kind(&self) -> CueStrErrorKind {
+    self.kind
+  }
+}
+
+/// Kinds of errors that can occur while parsing a cue string.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CueStrErrorKind {
+  /// Missing opening or closing quotes.
+  MissingQuotes,
+  /// Missing ending double quote.
+  MissingEndingQuote,
+  /// An unescaped special character was found.
+  UnescapedSpecialChar,
+}
+
+impl core::fmt::Display for CueStrErrorKind {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    match self {
+      CueStrErrorKind::MissingQuotes => f.write_str("string needs to be quoted"),
+      CueStrErrorKind::MissingEndingQuote => f.write_str("string is missing ending double quote"),
+      CueStrErrorKind::UnescapedSpecialChar => f.write_str("unescaped special character found"),
+    }
+  }
+}
+
+impl core::fmt::Display for CueStrError {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.write_fmt(format_args!("invalid cue string: {}", self.kind))
+  }
+}
+
+impl core::error::Error for CueStrError {}

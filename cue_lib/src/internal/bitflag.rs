@@ -1,0 +1,107 @@
+macro_rules! define_bitflag {
+  ($access_level:vis $name:ident $inner_type:ty, values = [$(
+    $(#[$docs:meta])*
+    ($const_name:ident, $flag_value:expr)
+  ),+]) => {
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    $access_level struct $name($inner_type);
+
+    impl Default for $name {
+      #[inline]
+      fn default() -> Self {
+        Self(0)
+      }
+    }
+
+    impl $name {
+      $(
+        $(#[$docs])*
+        const $const_name: Self = Self($flag_value);
+      )+
+
+      #[inline]
+      pub const fn as_inner(&self) -> $inner_type {
+        self.0
+      }
+
+      #[inline]
+      pub const fn has(&self, rhs: Self) -> bool {
+        (self.0 & rhs.0) == rhs.0
+      }
+
+      #[inline]
+      pub const fn set(self, value: Self) -> Self {
+        Self(self.0 | value.0)
+      }
+
+      #[inline]
+      pub const fn unset(self, value: Self) -> Self {
+        Self(self.0 & (!value.0))
+      }
+
+      #[inline]
+      pub const fn len(&self) -> u32 {
+        self.0.count_ones()
+      }
+
+      #[inline]
+      pub const fn is_empty(&self) -> bool {
+        self.0 == 0
+      }
+    }
+
+    impl From<$inner_type> for $name {
+      #[inline]
+      fn from(value: $inner_type) -> Self {
+        Self(value)
+      }
+    }
+
+    impl core::ops::BitOr for $name {
+      type Output = $name;
+      #[inline]
+      fn bitor(self, rhs: Self) -> Self::Output {
+        $name(self.0 | rhs.0)
+      }
+    }
+
+    impl core::ops::BitAnd for $name {
+      type Output = $name;
+      #[inline]
+      fn bitand(self, rhs: $name) -> Self::Output {
+        $name(self.0 & rhs.0)
+      }
+    }
+
+    impl core::ops::BitXor for $name {
+      type Output = $name;
+      #[inline]
+      fn bitxor(self, rhs: Self) -> Self::Output {
+        $name(self.0 ^ rhs.0)
+      }
+    }
+
+    impl core::ops::BitOrAssign for $name {
+      #[inline]
+      fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+      }
+    }
+
+    impl core::ops::BitAndAssign for $name {
+      #[inline]
+      fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+      }
+    }
+
+    impl core::ops::BitXorAssign for $name {
+      #[inline]
+      fn bitxor_assign(&mut self, rhs: Self) {
+        self.0 ^= rhs.0;
+      }
+    }
+  };
+}
+
+pub(crate) use define_bitflag;

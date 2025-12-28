@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = ["cue_*"]
+
+[profile.release]
+lto = true
+strip = "debuginfo"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Timur Olur <pm@smdd.dev>"]
+documentation = "https://github.com/SuperioOne/cue_rs"
+homepage = "https://github.com/SuperioOne/cue_rs"
+license = "Apache-2.0"
+repository = "https://github.com/SuperioOne/cue_rs"

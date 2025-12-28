@@ -1,0 +1,13 @@
+[package]
+name = "cue_lib"
+edition = "2024"
+description = "cuesheet library"
+keywords = ["cue", "cuesheet", "file-format", "library"]
+version.workspace = true
+authors.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
