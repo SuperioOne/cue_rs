@@ -69,7 +69,7 @@ pub struct TrackIndexes<'a> {
 
 impl<'a> TrackProbe<'a> {
   #[inline]
-  pub const fn track(&self) -> &Track {
+  pub const fn track_info(&self) -> &Track {
     &self.track
   }
 
@@ -237,9 +237,19 @@ impl<'a> TrackIndexes<'a> {
             return Err(parse_error.into());
           }
         }
-        Some(Command::Track { .. }) => return Ok(None),
+        Some(Command::Track { .. }) | None => {
+          if self.previous_index.is_none() {
+            let parse_error = ParseError::new_with_position(
+              ParseErrorKind::InvalidCommandFormat,
+              self.lexer.position(),
+            );
+
+            return Err(parse_error.into());
+          } else {
+            return Ok(None);
+          }
+        }
         Some(_) => continue,
-        None => return Ok(None),
       }
     }
   }

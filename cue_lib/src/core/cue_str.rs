@@ -153,3 +153,26 @@ impl core::fmt::Display for CueStr<'_> {
     }
   }
 }
+
+#[cfg(feature = "alloc")]
+mod alloc {
+  use super::CueStr;
+  use alloc::{borrow::Cow, string::ToString};
+
+  impl<'a> Into<Cow<'a, str>> for CueStr<'a> {
+    #[inline]
+    fn into(self) -> Cow<'a, str> {
+      (&self).into()
+    }
+  }
+
+  impl<'a> Into<Cow<'a, str>> for &CueStr<'a> {
+    fn into(self) -> Cow<'a, str> {
+      match self {
+        CueStr::QuotedText(v) => Cow::Borrowed(&v[1..(v.len() - 1)]),
+        CueStr::QuotedTextWithEscape(v) => Cow::Owned(v.to_string()),
+        CueStr::Text(v) => Cow::Borrowed(v),
+      }
+    }
+  }
+}

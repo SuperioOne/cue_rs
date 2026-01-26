@@ -204,7 +204,7 @@ impl core::fmt::Display for CueLibErrorKind {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     match self {
       CueLibErrorKind::ParseError(err) => f.write_fmt(format_args!(
-        "parse error: {kind} at {line}:{col}",
+        "parse error, {kind} at {line}:{col}",
         kind = err.kind,
         line = err.line + 1,
         col = err.col + 1
@@ -215,7 +215,7 @@ impl core::fmt::Display for CueLibErrorKind {
 
 impl core::fmt::Display for CueLibError {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.write_fmt(format_args!("cue lib error: {}", self.kind))
+    f.write_fmt(format_args!("{}", self.kind))
   }
 }
 

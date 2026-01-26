@@ -1,12 +1,13 @@
-use super::builder::CueProbeBuilder;
-use super::remark::RemarkIter;
-use super::track::{TrackListProbe, Tracks};
-use crate::core::album_file::AlbumFile;
-use crate::core::command::Command;
-use crate::core::cue_str::CueStr;
-use crate::error::{CueLibError, ParseError, ParseErrorKind};
-use crate::internal::lexer::CueLexer;
-use crate::internal::tokenizer::CueTokenizer;
+use super::{
+  builder::CueProbeBuilder,
+  remark::RemarkIter,
+  track::{TrackListProbe, Tracks},
+};
+use crate::{
+  core::{album_file::AlbumFile, command::Command, cue_str::CueStr},
+  error::{CueLibError, ParseError, ParseErrorKind},
+  internal::{lexer::CueLexer, tokenizer::CueTokenizer},
+};
 
 pub struct CueSheetProbe<'a> {
   /// Catalog number for the release (CATALOG command)
@@ -35,7 +36,7 @@ pub struct CueSheetProbe<'a> {
 }
 
 impl<'a> CueSheetProbe<'a> {
-  pub fn attach_to(cuesheet: &'a str) -> Result<Self, CueLibError> {
+  pub fn new(cuesheet: &'a str) -> Result<Self, CueLibError> {
     let tokenizer = CueTokenizer::new(cuesheet);
     let mut lexer = CueLexer::new(tokenizer);
     let mut builder = CueProbeBuilder::new();
@@ -70,6 +71,29 @@ impl<'a> CueSheetProbe<'a> {
     })?;
 
     Ok(probe)
+  }
+
+  /// Iterates over probe to verify if cuesheet is valid.
+  pub fn verify(cuesheet: &str) -> Result<(), CueLibError> {
+    let probe = CueSheetProbe::new(cuesheet)?;
+    let mut tracks = probe.tracks();
+
+    'EXHAUST_TRACKS: loop {
+      match tracks.next_track()? {
+        Some(track) => {
+          let mut indexes = track.indexes();
+
+          'EXHAUST_INDEXES: loop {
+            if let None = indexes.next_index()? {
+              break 'EXHAUST_INDEXES;
+            }
+          }
+        }
+        None => break 'EXHAUST_TRACKS,
+      }
+    }
+
+    Ok(())
   }
 
   /// Returns a reference to the album title if present.
@@ -116,7 +140,7 @@ impl<'a> CueSheetProbe<'a> {
 
   /// Returns an iterator over the remarks in the album portion of the cuesheet.
   #[inline]
-  pub fn remarks(&self) -> RemarkIter<'a> {
+  pub const fn remarks(&self) -> RemarkIter<'a> {
     RemarkIter::new(self.album_buffer)
   }
 }

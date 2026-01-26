@@ -5,7 +5,7 @@ pub struct RemarkIter<'a> {
 }
 
 impl<'a> RemarkIter<'a> {
-  pub(super) fn new(buffer: &'a str) -> Self {
+  pub(super) const fn new(buffer: &'a str) -> Self {
     Self {
       lexer: CueLexer::new(CueTokenizer::new(buffer)),
     }

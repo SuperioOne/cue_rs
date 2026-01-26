@@ -1,14 +1,20 @@
-use super::enum_str::impl_enum_str;
-use super::tokenizer::{CueTokenizer, Position};
-use crate::core::album_file::{AlbumFile, KnownFileType};
-use crate::core::command::Command;
-use crate::core::cue_str::CueStr;
-use crate::core::flags::TrackFlag;
-use crate::core::timestamp::CueTimeStamp;
-use crate::core::track::{DataType, IndexNo, Track, TrackIndex, TrackNo};
-use crate::discid::isrc::Isrc;
-use crate::error::{ParseError, ParseErrorKind};
-use crate::internal::tokenizer::Token;
+use super::{
+  enum_str::impl_enum_str,
+  tokenizer::{CueTokenizer, Position},
+};
+use crate::{
+  core::{
+    album_file::{AlbumFile, KnownFileType},
+    command::Command,
+    cue_str::CueStr,
+    flags::TrackFlag,
+    timestamp::CueTimeStamp,
+    track::{DataType, IndexNo, Track, TrackIndex, TrackNo},
+  },
+  discid::isrc::Isrc,
+  error::{ParseError, ParseErrorKind},
+  internal::tokenizer::Token,
+};
 use core::str::FromStr;
 
 #[derive(Clone)]
@@ -39,7 +45,7 @@ impl_enum_str!(
 );
 
 impl<'a> CueLexer<'a> {
-  pub fn new(tokenizer: CueTokenizer<'a>) -> Self {
+  pub const fn new(tokenizer: CueTokenizer<'a>) -> Self {
     Self { tokenizer }
   }
 

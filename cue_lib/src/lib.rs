@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 pub(crate) mod internal;
 
 pub mod core;

@@ -27,10 +27,14 @@ pub struct CueTokenizer<'a> {
 }
 
 impl<'a> CueTokenizer<'a> {
-  pub fn new(buffer: &'a str) -> Self {
+  pub const fn new(buffer: &'a str) -> Self {
     Self {
       buffer,
-      position: Position::default(),
+      position: Position {
+        line: 0,
+        column: 0,
+        cursor_index: 0,
+      },
     }
   }
 
@@ -90,7 +94,7 @@ impl<'a> CueTokenizer<'a> {
       match chars.next() {
         Some(value) => {
           if value != '\n' && value.is_whitespace() {
-            self.position.cursor_index += 1;
+            self.position.cursor_index += value.len_utf8();
             self.position.column += 1;
           } else {
             break;
@@ -103,7 +107,7 @@ impl<'a> CueTokenizer<'a> {
 
   #[inline]
   fn line_feed(&mut self) -> Token<'a> {
-    self.position.cursor_index += 1;
+    self.position.cursor_index += '\n'.len_utf8();
     self.position.line += 1;
     self.position.column = 0;
 
@@ -121,8 +125,8 @@ impl<'a> CueTokenizer<'a> {
       () => {{
         let next = chars.next();
 
-        if next.is_some() {
-          self.position.cursor_index += 1;
+        if let Some(v) = next {
+          self.position.cursor_index += v.len_utf8();
           self.position.column += 1;
         }
 
@@ -171,7 +175,7 @@ impl<'a> CueTokenizer<'a> {
     loop {
       match chars.next() {
         Some(v) if !v.is_whitespace() => {
-          self.position.cursor_index += 1;
+          self.position.cursor_index += v.len_utf8();
           self.position.column += 1;
         }
         _ => {

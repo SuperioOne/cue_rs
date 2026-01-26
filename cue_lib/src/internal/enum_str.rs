@@ -15,6 +15,16 @@ macro_rules! impl_enum_str {
         ),+
       }
 
+      impl $type_name {
+        pub const fn as_str(&self) -> &'static str {
+          match self {
+            $(
+              Self::$enum_name => $display,
+            )+
+          }
+        }
+      }
+
       impl core::str::FromStr for $type_name {
         type Err = $err;
 
@@ -33,11 +43,7 @@ macro_rules! impl_enum_str {
 
       impl core::fmt::Display for $type_name {
         fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-          match self {
-            $(
-              Self::$enum_name => f.write_str($display),
-            )+
-          }
+          f.write_str(self.as_str())
         }
       }
     };
