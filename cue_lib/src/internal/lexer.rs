@@ -7,6 +7,7 @@ use crate::{
     album_file::{AlbumFile, KnownFileType},
     command::Command,
     cue_str::CueStr,
+    error::CueStrError,
     flags::TrackFlag,
     timestamp::CueTimeStamp,
     track::{DataType, IndexNo, Track, TrackIndex, TrackNo},
@@ -20,6 +21,7 @@ use core::str::FromStr;
 #[derive(Clone)]
 pub struct CueLexer<'a> {
   tokenizer: CueTokenizer<'a>,
+  position: Position,
 }
 
 struct UnknownCommand;
@@ -46,19 +48,29 @@ impl_enum_str!(
 
 impl<'a> CueLexer<'a> {
   pub const fn new(tokenizer: CueTokenizer<'a>) -> Self {
-    Self { tokenizer }
+    let position = *tokenizer.position();
+    Self {
+      tokenizer,
+      position,
+    }
   }
 
   /// Creates a snapshot of tokenizer and creates a new lexer instance from it.
   pub const fn snapshot(&self) -> Self {
     Self {
       tokenizer: self.tokenizer.snapshot(),
+      position: self.position,
     }
   }
 
   #[inline]
   pub const fn position(&self) -> &Position {
-    self.tokenizer.position()
+    &self.position
+  }
+
+  #[inline]
+  pub const fn cursor_position(&self) -> usize {
+    self.tokenizer.cursor_position()
   }
 
   #[inline]
@@ -68,7 +80,7 @@ impl<'a> CueLexer<'a> {
 
   pub fn next_command(&mut self) -> Result<Option<Command<'a>>, ParseError> {
     loop {
-      match self.tokenizer.next_token() {
+      match self.next_token() {
         Ok(Some(command_token)) => match command_token {
           Token::Text {
             value: CueStr::Text(cmd_text),
@@ -112,8 +124,13 @@ impl<'a> CueLexer<'a> {
     }
   }
 
+  fn next_token(&mut self) -> Result<Option<Token<'a>>, CueStrError> {
+    self.position = *self.tokenizer.position();
+    self.tokenizer.next_token()
+  }
+
   fn expect_cue_str(&mut self) -> Result<CueStr<'a>, ParseError> {
-    match self.tokenizer.next_token() {
+    match self.next_token() {
       Ok(Some(Token::Text { value })) => Ok(value),
       Ok(_) => Err(ParseError::new_with_position(
         ParseErrorKind::InvalidCueSheetFormat,
@@ -124,7 +141,7 @@ impl<'a> CueLexer<'a> {
   }
 
   fn expect_str(&mut self) -> Result<&'a str, ParseError> {
-    match self.tokenizer.next_token() {
+    match self.next_token() {
       Ok(Some(Token::Text {
         value: CueStr::Text(text),
       })) => Ok(text),
@@ -137,7 +154,7 @@ impl<'a> CueLexer<'a> {
   }
 
   fn expect_line_end(&mut self) -> Result<(), ParseError> {
-    match self.tokenizer.next_token() {
+    match self.next_token() {
       Ok(Some(Token::LF) | None) => Ok(()),
       _ => Err(ParseError::new_with_position(
         ParseErrorKind::InvalidCueSheetFormat,
@@ -176,7 +193,7 @@ impl<'a> CueLexer<'a> {
     let mut value = TrackFlag::default();
 
     loop {
-      match self.tokenizer.next_token() {
+      match self.next_token() {
         Ok(Some(Token::Text {
           value: CueStr::Text(flag_str),
         })) => {
@@ -272,11 +289,11 @@ impl<'a> CueLexer<'a> {
   }
 
   fn read_remark(&mut self) -> Result<Command<'a>, ParseError> {
-    let start = self.tokenizer.position().cursor_index;
+    let start = self.tokenizer.cursor_position();
     let end = loop {
-      match self.tokenizer.next_token() {
+      match self.next_token() {
         Ok(Some(Token::LF) | None) => {
-          break self.tokenizer.position().cursor_index - '\n'.len_utf8();
+          break self.tokenizer.cursor_position() - '\n'.len_utf8();
         }
         _ => continue,
       }

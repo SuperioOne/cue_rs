@@ -15,8 +15,3 @@ clap = { version = "4", features = ["derive"] }
 cue_lib = { path = "../cue_lib", features = ["alloc"] }
 serde = { version = "1", features = ["serde_derive"] }
 serde_json = { version = "1" }
-toml = { version = "0.9", default-features = false, features = [
-        "display",
-        "std",
-        "serde",
-] }

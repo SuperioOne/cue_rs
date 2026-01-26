@@ -59,16 +59,16 @@ impl<'a> CueSheetProbe<'a> {
 
           break 'PARSER;
         }
-        _ => Err(ParseErrorKind::InvalidCueSheetFormat),
+        _ => Err(ParseErrorKind::InvalidCommandUsage),
       }
-      .map_err(|kind| ParseError::new_with_position(kind, lexer.position()))?;
+      .map_err(|kind| ParseError::new_with_line(kind, lexer.position().line))?;
 
-      album_buffer_end = lexer.position().cursor_index;
+      album_buffer_end = lexer.cursor_position();
     }
 
-    let probe = builder.build(&cuesheet[0..album_buffer_end]).map_err(|_| {
-      ParseError::new_with_position(ParseErrorKind::InvalidCueSheetFormat, lexer.position())
-    })?;
+    let probe = builder
+      .build(&cuesheet[0..album_buffer_end])
+      .map_err(|kind| ParseError::new_with_position(kind, lexer.position()))?;
 
     Ok(probe)
   }

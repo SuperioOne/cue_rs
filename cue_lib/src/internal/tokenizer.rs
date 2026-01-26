@@ -1,9 +1,13 @@
-use crate::core::cue_str::CueStr;
-use crate::core::error::{CueStrError, CueStrErrorKind};
+use crate::core::{
+  cue_str::CueStr,
+  error::{CueStrError, CueStrErrorKind},
+};
+
+/// Zero Width No-break Space aka Byte Order Mark
+const ZWNBP: char = '\u{feff}';
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Position {
-  pub cursor_index: usize,
   pub line: usize,
   pub column: usize,
 }
@@ -24,22 +28,26 @@ impl<'a> From<CueStr<'a>> for Token<'a> {
 pub struct CueTokenizer<'a> {
   buffer: &'a str,
   position: Position,
+  cursor_index: usize,
 }
 
 impl<'a> CueTokenizer<'a> {
   pub const fn new(buffer: &'a str) -> Self {
     Self {
       buffer,
-      position: Position {
-        line: 0,
-        column: 0,
-        cursor_index: 0,
-      },
+      position: Position { line: 0, column: 0 },
+      cursor_index: 0,
     }
   }
 
+  #[inline]
   pub const fn position(&self) -> &Position {
     &self.position
+  }
+
+  #[inline]
+  pub const fn cursor_position(&self) -> usize {
+    self.cursor_index
   }
 
   /// This function simply clones the underlying buffer reference and position.
@@ -51,20 +59,21 @@ impl<'a> CueTokenizer<'a> {
     Self {
       buffer: self.buffer,
       position: Position {
-        cursor_index: self.position.cursor_index,
         line: self.position.line,
         column: self.position.column,
       },
+      cursor_index: self.cursor_index,
     }
   }
 
+  #[inline]
   pub const fn as_raw_buffer(&self) -> &'a str {
     &self.buffer
   }
 
   pub fn next_token(&mut self) -> Result<Option<Token<'a>>, CueStrError> {
     self.eat_whitespace();
-    let start = self.position.cursor_index;
+    let start = self.cursor_index;
 
     if start < self.buffer.len() {
       let remaining = &self.buffer[start..];
@@ -79,6 +88,7 @@ impl<'a> CueTokenizer<'a> {
         _ => self.regular_str()?.into(),
       };
 
+      self.eat_whitespace();
       Ok(Some(token))
     } else {
       Ok(None)
@@ -86,15 +96,15 @@ impl<'a> CueTokenizer<'a> {
   }
 
   fn eat_whitespace(&mut self) {
-    let start = self.position.cursor_index;
+    let start = self.cursor_index;
     let remaining = &self.buffer[start..];
     let mut chars = remaining.chars();
 
     loop {
       match chars.next() {
         Some(value) => {
-          if value != '\n' && value.is_whitespace() {
-            self.position.cursor_index += value.len_utf8();
+          if value != '\n' && (value.is_whitespace() || value == ZWNBP) {
+            self.cursor_index += value.len_utf8();
             self.position.column += 1;
           } else {
             break;
@@ -107,7 +117,7 @@ impl<'a> CueTokenizer<'a> {
 
   #[inline]
   fn line_feed(&mut self) -> Token<'a> {
-    self.position.cursor_index += '\n'.len_utf8();
+    self.cursor_index += '\n'.len_utf8();
     self.position.line += 1;
     self.position.column = 0;
 
@@ -116,7 +126,7 @@ impl<'a> CueTokenizer<'a> {
 
   #[inline]
   fn quoted_str(&mut self) -> Result<CueStr<'a>, CueStrError> {
-    let start = self.position.cursor_index;
+    let start = self.cursor_index;
     let remaining = &self.buffer[start..];
     let mut has_escape = false;
     let mut chars = remaining.chars();
@@ -126,7 +136,7 @@ impl<'a> CueTokenizer<'a> {
         let next = chars.next();
 
         if let Some(v) = next {
-          self.position.cursor_index += v.len_utf8();
+          self.cursor_index += v.len_utf8();
           self.position.column += 1;
         }
 
@@ -140,7 +150,7 @@ impl<'a> CueTokenizer<'a> {
     loop {
       match next_char!() {
         Some('"') => {
-          let end = self.position.cursor_index;
+          let end = self.cursor_index;
           let cue_str = if has_escape {
             CueStr::QuotedTextWithEscape(&self.buffer[start..end])
           } else {
@@ -168,18 +178,18 @@ impl<'a> CueTokenizer<'a> {
 
   #[inline]
   fn regular_str(&mut self) -> Result<CueStr<'a>, CueStrError> {
-    let start = self.position.cursor_index;
+    let start = self.cursor_index;
     let remaining = &self.buffer[start..];
     let mut chars = remaining.chars();
 
     loop {
       match chars.next() {
         Some(v) if !v.is_whitespace() => {
-          self.position.cursor_index += v.len_utf8();
+          self.cursor_index += v.len_utf8();
           self.position.column += 1;
         }
         _ => {
-          let end = self.position.cursor_index;
+          let end = self.cursor_index;
           let cue_str = CueStr::Text(&self.buffer[start..end]);
 
           return Ok(cue_str);

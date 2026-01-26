@@ -17,12 +17,9 @@ pub struct Args {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
   Verify,
-  Convert {
+  ConvertJson {
     #[arg(short, long)]
     output_file: Option<PathBuf>,
-
-    #[arg(short, long)]
-    format: Option<OutputFormat>,
 
     #[arg(short, long)]
     metadata: Option<MetadataFormat>,
@@ -33,12 +30,6 @@ pub enum Commands {
   Query {
     input: OsString,
   },
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
-pub enum OutputFormat {
-  Json,
-  Toml,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -65,12 +56,5 @@ impl Default for VerboseLevel {
   #[inline]
   fn default() -> Self {
     Self::Default
-  }
-}
-
-impl Default for OutputFormat {
-  #[inline]
-  fn default() -> Self {
-    Self::Json
   }
 }

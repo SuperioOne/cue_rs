@@ -33,9 +33,6 @@ impl From<CueLibErrorKind> for CueLibError {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ParseError {
-  /// Raw index on the buffer where error is occured.
-  buffer_index: usize,
-
   /// Zero-based line number.
   line: usize,
 
@@ -63,28 +60,22 @@ impl ParseError {
   }
 
   #[inline]
-  pub const fn raw_buffer_position(&self) -> usize {
-    self.buffer_index
-  }
-
-  #[inline]
-  pub const fn new(kind: ParseErrorKind, buffer_index: usize, line: usize, col: usize) -> Self {
-    Self {
-      kind,
-      buffer_index,
-      line,
-      col,
-    }
+  pub const fn new(kind: ParseErrorKind, line: usize, col: usize) -> Self {
+    Self { kind, line, col }
   }
 
   #[inline]
   pub(crate) const fn new_with_position(kind: ParseErrorKind, position: &Position) -> Self {
     Self {
       kind,
-      buffer_index: position.cursor_index,
       line: position.line,
       col: position.column,
     }
+  }
+
+  #[inline]
+  pub(crate) const fn new_with_line(kind: ParseErrorKind, line: usize) -> Self {
+    Self { kind, line, col: 0 }
   }
 }
 
@@ -101,6 +92,7 @@ pub enum ParseErrorKind {
   UnknownCommand,
   UnknownFileType(UnknownFileType),
   InvalidCueSheetFormat,
+  InvalidCommandUsage,
   EmptyCueSheet,
   MultipleCommand,
   InvalidTrackNo,
@@ -184,6 +176,7 @@ impl core::fmt::Display for ParseErrorKind {
       ParseErrorKind::FlagParseError(err) => err.fmt(f),
       ParseErrorKind::IsrcParseError(err) => err.fmt(f),
       ParseErrorKind::InvalidCommandFormat => f.write_str("invalid cuesheet command format"),
+      ParseErrorKind::InvalidCommandUsage => f.write_str("invalid cuesheet command usage"),
       ParseErrorKind::InvalidCueSheetFormat => f.write_str("invalid cuesheet format"),
       ParseErrorKind::InvalidNumericRange(err) => err.fmt(f),
       ParseErrorKind::TimeStampParseError(err) => err.fmt(f),
@@ -203,12 +196,9 @@ impl core::fmt::Display for ParseErrorKind {
 impl core::fmt::Display for CueLibErrorKind {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     match self {
-      CueLibErrorKind::ParseError(err) => f.write_fmt(format_args!(
-        "parse error, {kind} at {line}:{col}",
-        kind = err.kind,
-        line = err.line + 1,
-        col = err.col + 1
-      )),
+      CueLibErrorKind::ParseError(err) => {
+        f.write_fmt(format_args!("parse error, {kind}", kind = err.kind,))
+      }
     }
   }
 }

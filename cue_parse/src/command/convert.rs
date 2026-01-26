@@ -1,6 +1,6 @@
 use super::Command;
 use crate::{
-  args::{MetadataFormat, OutputFormat, VerboseLevel},
+  args::{MetadataFormat, VerboseLevel},
   cli_error::ErrorFormat,
 };
 use cue_lib::{error::CueLibError, probe::CueSheetProbe};
@@ -8,14 +8,13 @@ use serde::Serialize;
 use std::{
   borrow::Cow,
   fs::OpenOptions,
-  io::{BufWriter, Write, stdout},
+  io::{BufWriter, stdout},
   path::PathBuf,
 };
 
 pub struct ConvertCommand<'a> {
   cuesheet: &'a str,
   allow_metadata_remarks: Option<MetadataFormat>,
-  format: OutputFormat,
   output_file: Option<PathBuf>,
   pretty_print: bool,
 }
@@ -52,7 +51,6 @@ pub enum ConvertError {
   CueLibError(CueLibError),
   IOError(std::io::Error),
   JsonSerializeError(serde_json::error::Error),
-  TomlSerializeError(toml::ser::Error),
 }
 
 impl<'a> ConvertCommand<'a> {
@@ -60,17 +58,10 @@ impl<'a> ConvertCommand<'a> {
   pub const fn new(cuesheet: &'a str) -> Self {
     Self {
       cuesheet,
-      format: OutputFormat::Json,
       pretty_print: false,
       allow_metadata_remarks: None,
       output_file: None,
     }
-  }
-
-  #[inline]
-  pub const fn set_format(mut self, format: OutputFormat) -> Self {
-    self.format = format;
-    self
   }
 
   #[inline]
@@ -193,24 +184,11 @@ impl<'a> Command for &'a ConvertCommand<'a> {
 
     let mut buf_writer = BufWriter::new(target_stream);
 
-    match self.format {
-      OutputFormat::Json => {
-        if self.pretty_print {
-          serde_json::to_writer_pretty(&mut buf_writer, &cuesheet)?
-        } else {
-          serde_json::to_writer(&mut buf_writer, &cuesheet)?
-        }
-      }
-      OutputFormat::Toml => {
-        let converted = if self.pretty_print {
-          toml::to_string_pretty(&cuesheet)?
-        } else {
-          toml::to_string(&cuesheet)?
-        };
-
-        buf_writer.write_all(converted.as_bytes())?;
-      }
-    };
+    if self.pretty_print {
+      serde_json::to_writer_pretty(&mut buf_writer, &cuesheet)?
+    } else {
+      serde_json::to_writer(&mut buf_writer, &cuesheet)?
+    }
 
     Ok(())
   }
@@ -230,13 +208,6 @@ impl From<serde_json::error::Error> for ConvertError {
   }
 }
 
-impl From<toml::ser::Error> for ConvertError {
-  #[inline]
-  fn from(value: toml::ser::Error) -> Self {
-    Self::TomlSerializeError(value)
-  }
-}
-
 impl From<std::io::Error> for ConvertError {
   #[inline]
   fn from(value: std::io::Error) -> Self {
@@ -248,6 +219,7 @@ impl ErrorFormat for ConvertError {
   fn fmt(
     &self,
     f: &mut std::fmt::Formatter<'_>,
+    _: &str,
     verbose_level: crate::args::VerboseLevel,
   ) -> std::fmt::Result {
     if verbose_level == VerboseLevel::Quiet {
@@ -257,7 +229,6 @@ impl ErrorFormat for ConvertError {
         ConvertError::CueLibError(error) => std::fmt::Display::fmt(&error, f),
         ConvertError::IOError(error) => std::fmt::Display::fmt(&error, f),
         ConvertError::JsonSerializeError(error) => std::fmt::Display::fmt(&error, f),
-        ConvertError::TomlSerializeError(error) => std::fmt::Display::fmt(&error, f),
       }
     }
   }

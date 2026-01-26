@@ -164,8 +164,8 @@ impl<'a> Tracks<'a> {
         lexer: self.lexer.snapshot(),
       };
       let mut builder = TrackProbeBuilder::new(index_probe, curr_track);
-      let track_buffer_start = self.lexer.position().cursor_index;
-      let mut track_buffer_end = track_buffer_start;
+      let track_buf_start = self.lexer.cursor_position();
+      let mut track_buf_end = track_buf_start;
 
       'PARSER: loop {
         match self.lexer.next_command()? {
@@ -191,14 +191,14 @@ impl<'a> Tracks<'a> {
             self.track = None;
             break 'PARSER;
           }
-          Some(_) => Err(ParseErrorKind::InvalidCueSheetFormat),
+          Some(_) => Err(ParseErrorKind::InvalidCommandUsage),
         }
-        .map_err(|kind| ParseError::new_with_position(kind, self.lexer.position()))?;
+        .map_err(|kind| ParseError::new_with_line(kind, self.lexer.position().line))?;
 
-        track_buffer_end = self.lexer.position().cursor_index;
+        track_buf_end = self.lexer.cursor_position();
       }
 
-      let track_buffer = &self.lexer.as_raw_buffer()[track_buffer_start..track_buffer_end];
+      let track_buffer = &self.lexer.as_raw_buffer()[track_buf_start..track_buf_end];
       let probe = builder
         .build(track_buffer)
         .map_err(|kind| ParseError::new_with_position(kind, self.lexer.position()))?;
@@ -229,9 +229,9 @@ impl<'a> TrackIndexes<'a> {
             self.previous_index = Some(value);
             return Ok(Some(value));
           } else {
-            let parse_error = ParseError::new_with_position(
+            let parse_error = ParseError::new_with_line(
               ParseErrorKind::InvalidTrackIndex,
-              self.lexer.position(),
+              self.lexer.position().line,
             );
 
             return Err(parse_error.into());
@@ -239,9 +239,9 @@ impl<'a> TrackIndexes<'a> {
         }
         Some(Command::Track { .. }) | None => {
           if self.previous_index.is_none() {
-            let parse_error = ParseError::new_with_position(
+            let parse_error = ParseError::new_with_line(
               ParseErrorKind::InvalidCommandFormat,
-              self.lexer.position(),
+              self.lexer.position().line,
             );
 
             return Err(parse_error.into());

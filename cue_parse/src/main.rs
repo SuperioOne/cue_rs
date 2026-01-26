@@ -34,7 +34,7 @@ fn main() -> ExitCode {
   let cuesheet = match read_cuesheet(args.input.as_ref()) {
     Ok(buffer) => buffer,
     Err(err) => {
-      cli_stderr!(err, verbosity = verbosity);
+      cli_stderr!(err, input = "", verbosity = verbosity);
       return ExitCode::FAILURE;
     }
   };
@@ -44,7 +44,7 @@ fn main() -> ExitCode {
       match $cmd.run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-          cli_stderr!(err, verbosity = verbosity);
+          cli_stderr!(err, input = cuesheet.as_str(), verbosity = verbosity);
           ExitCode::FAILURE
         }
       }
@@ -56,14 +56,12 @@ fn main() -> ExitCode {
       let cmd = CommandVerify::new(cuesheet.as_str());
       run!(cmd)
     }
-    args::Commands::Convert {
+    args::Commands::ConvertJson {
       output_file,
-      format,
       metadata,
       pretty_print,
     } => {
       let cmd = ConvertCommand::new(cuesheet.as_str())
-        .set_format(format.unwrap_or_default())
         .set_metadata_remarks(metadata)
         .set_output_file(output_file)
         .set_pretty_print(pretty_print);
