@@ -1,0 +1,22 @@
+[package]
+name = "cue_parse"
+description = "cuesheet parse cli"
+keywords = ["cue", "cuesheet", "file-format", "cli", "cli-tool"]
+authors.workspace = true
+documentation.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+cue_lib = { path = "../cue_lib", features = ["alloc"] }
+serde = { version = "1", features = ["serde_derive"] }
+serde_json = { version = "1" }
+toml = { version = "0.9", default-features = false, features = [
+        "display",
+        "std",
+        "serde",
+] }
