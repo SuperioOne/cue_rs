@@ -3,7 +3,10 @@ use crate::{
   args::{MetadataFormat, VerboseLevel},
   cli_error::ErrorFormat,
 };
-use cue_lib::{error::CueLibError, probe::CueSheetProbe};
+use cue_lib::{
+  error::CueLibError,
+  probe::{CueSheetProbe, track::TrackIndexes},
+};
 use serde::Serialize;
 use std::{
   borrow::Cow,
@@ -39,18 +42,26 @@ pub struct TrackInfo<'a> {
   pub performer: Option<Cow<'a, str>>,
   pub postgap: Option<u128>,
   pub pregap: Option<u128>,
-  pub pregap_time: Option<u128>,
   pub songwriter: Option<Cow<'a, str>>,
-  pub start_time: u128,
   pub sub_indexes: Option<Vec<u128>>,
+  pub time_info: TimeInfo,
   pub title: Option<Cow<'a, str>>,
   pub track_no: u8,
+}
+
+#[derive(Serialize, Default)]
+pub struct TimeInfo {
+  start: u128,
+  end: Option<u128>,
+  pregap_start: Option<u128>,
+  duration: Option<u128>,
 }
 
 pub enum ConvertError {
   CueLibError(CueLibError),
   IOError(std::io::Error),
   JsonSerializeError(serde_json::error::Error),
+  IndexError,
 }
 
 impl<'a> ConvertCommand<'a> {
@@ -101,6 +112,7 @@ impl<'a> ConvertCommand<'a> {
     Ok(cuesheet)
   }
 
+  #[inline]
   fn process_tracks(
     probe: &CueSheetProbe<'a>,
     cuesheet: &mut CueSheet<'a>,
@@ -108,59 +120,84 @@ impl<'a> ConvertCommand<'a> {
     let mut track_probe = probe.tracks();
 
     while let Some(track) = track_probe.next_track()? {
-      let mut indexes = track.indexes();
       let mut track_info = TrackInfo {
         data_type: track.track_data_type().as_str(),
+        flags: None,
         isrc: track.isrc().map(|v| v.to_string()),
         performer: track.performer().map(|v| v.into()),
         postgap: track.postgap().map(|v| v.as_millis()),
         pregap: track.pregap().map(|v| v.as_millis()),
         songwriter: track.songwriter().map(|v| v.into()),
+        sub_indexes: None,
+        time_info: TimeInfo::default(),
         title: track.title().map(|v| v.into()),
         track_no: track.track_no().into_inner(),
-        flags: None,
-        sub_indexes: None,
-        start_time: 0,
-        pregap_time: None,
       };
 
-      match indexes.next_index()? {
-        Some(index) => match index.index_no.into_inner() {
-          0 => {
-            track_info.pregap_time = Some(index.timestamp.as_millis());
-
-            if let Some(start) = indexes.next_index()?
-              && start.index_no.into_inner() == 1
-            {
-              track_info.start_time = start.timestamp.as_millis();
-            } else {
-              unreachable!()
-            }
-          }
-          1 => {
-            track_info.start_time = index.timestamp.as_millis();
-          }
-          _ => unreachable!(),
-        },
-        None => {
-          unreachable!()
-        }
-      };
-
-      let mut sub_indexes = Vec::new();
-
-      while let Some(index) = indexes.next_index()? {
-        sub_indexes.push(index.timestamp.as_millis());
-      }
-
-      if !sub_indexes.is_empty() {
-        track_info.sub_indexes = Some(sub_indexes);
-      }
-
+      Self::process_indexes(&mut track_info, track.indexes())?;
       cuesheet.tracks.push(track_info);
     }
 
+    Self::calc_track_times(&mut cuesheet.tracks);
+
     Ok(())
+  }
+
+  fn process_indexes(
+    track: &mut TrackInfo<'a>,
+    mut indexes: TrackIndexes<'a>,
+  ) -> Result<(), ConvertError> {
+    match indexes.next_index()? {
+      Some(index) => match index.index_no.as_ref() {
+        0 => {
+          track.time_info.pregap_start = Some(index.timestamp.as_millis());
+
+          if let Some(start) = indexes.next_index()?
+            && *start.index_no.as_ref() == 1u8
+          {
+            track.time_info.start = start.timestamp.as_millis();
+          } else {
+            return Err(ConvertError::IndexError);
+          }
+        }
+        1 => {
+          track.time_info.start = index.timestamp.as_millis();
+        }
+        _ => return Err(ConvertError::IndexError),
+      },
+      None => {
+        return Err(ConvertError::IndexError);
+      }
+    };
+
+    let mut sub_indexes = Vec::new();
+    while let Some(index) = indexes.next_index()? {
+      sub_indexes.push(index.timestamp.as_millis());
+    }
+
+    if !sub_indexes.is_empty() {
+      track.sub_indexes = Some(sub_indexes);
+    }
+
+    Ok(())
+  }
+
+  #[inline]
+  fn calc_track_times(tracks: &mut Vec<TrackInfo>) {
+    let mut track_iter = tracks.iter_mut().peekable();
+
+    while let Some(track) = track_iter.next() {
+      if let Some(next_track) = track_iter.peek() {
+        let end = if let Some(pregap) = next_track.time_info.pregap_start {
+          pregap
+        } else {
+          next_track.time_info.start
+        };
+
+        track.time_info.end = Some(end);
+        track.time_info.duration = Some(end - track.time_info.start);
+      }
+    }
   }
 }
 
@@ -226,6 +263,9 @@ impl ErrorFormat for ConvertError {
       Ok(())
     } else {
       match self {
+        ConvertError::IndexError => {
+          f.write_str("unhandled logic error, expected an index command but received nothing")
+        }
         ConvertError::CueLibError(error) => std::fmt::Display::fmt(&error, f),
         ConvertError::IOError(error) => std::fmt::Display::fmt(&error, f),
         ConvertError::JsonSerializeError(error) => std::fmt::Display::fmt(&error, f),
