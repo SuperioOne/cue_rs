@@ -6,7 +6,7 @@ use super::{
 use crate::{
   core::{album_file::AlbumFile, command::Command, cue_str::CueStr},
   error::{CueLibError, ParseError, ParseErrorKind},
-  internal::{lexer::CueLexer, tokenizer::CueTokenizer},
+  internal::{lexer::CueLexer, tokenizer::Tokenizer},
 };
 
 pub struct CueSheetProbe<'a> {
@@ -37,7 +37,7 @@ pub struct CueSheetProbe<'a> {
 
 impl<'a> CueSheetProbe<'a> {
   pub fn new(cuesheet: &'a str) -> Result<Self, CueLibError> {
-    let tokenizer = CueTokenizer::new(cuesheet);
+    let tokenizer = Tokenizer::new(cuesheet);
     let mut lexer = CueLexer::new(tokenizer);
     let mut builder = CueProbeBuilder::new();
     let mut album_buffer_end = 0;
@@ -81,7 +81,7 @@ impl<'a> CueSheetProbe<'a> {
     'EXHAUST_TRACKS: loop {
       match tracks.next_track()? {
         Some(track) => {
-          let mut indexes = track.indexes();
+          let mut indexes = track.sub_indexes();
 
           'EXHAUST_INDEXES: loop {
             if let None = indexes.next_index()? {
@@ -98,38 +98,38 @@ impl<'a> CueSheetProbe<'a> {
 
   /// Returns a reference to the album title if present.
   #[inline]
-  pub const fn album_title(&self) -> Option<&CueStr<'a>> {
-    self.title.as_ref()
+  pub const fn album_title(&self) -> Option<CueStr<'a>> {
+    self.title
   }
 
   /// Returns a reference to the performer name if present.
   #[inline]
-  pub const fn performer(&self) -> Option<&CueStr<'a>> {
-    self.performer.as_ref()
+  pub const fn performer(&self) -> Option<CueStr<'a>> {
+    self.performer
   }
 
   /// Returns a reference to the catalog number if present.
   #[inline]
-  pub const fn catalog(&self) -> Option<&CueStr<'a>> {
-    self.catalog.as_ref()
+  pub const fn catalog(&self) -> Option<CueStr<'a>> {
+    self.catalog
   }
 
   /// Returns a reference to the songwriter name if present.
   #[inline]
-  pub const fn songwriter(&self) -> Option<&CueStr<'a>> {
-    self.songwriter.as_ref()
+  pub const fn songwriter(&self) -> Option<CueStr<'a>> {
+    self.songwriter
   }
 
   /// Returns a reference to the CD-TEXT file name if present.
   #[inline]
-  pub const fn cdtextfile(&self) -> Option<&CueStr<'a>> {
-    self.cdtextfile.as_ref()
+  pub const fn cdtextfile(&self) -> Option<CueStr<'a>> {
+    self.cdtextfile
   }
 
   /// Returns a reference to the main audio file information if present.
   #[inline]
-  pub const fn file_info(&self) -> Option<&AlbumFile<'a>> {
-    self.file.as_ref()
+  pub const fn file_info(&self) -> Option<AlbumFile<'a>> {
+    self.file
   }
 
   /// Returns an iterator over the tracks in the cuesheet.
@@ -142,5 +142,12 @@ impl<'a> CueSheetProbe<'a> {
   #[inline]
   pub const fn remarks(&self) -> RemarkIter<'a> {
     RemarkIter::new(self.album_buffer)
+  }
+
+  /// Returns an iterator over the vorbis metadata remarks in the album portion of the cuesheet.
+  #[cfg(feature = "metadata")]
+  #[inline]
+  pub fn vorbis_comments(&self) -> crate::probe::vorbis_remark::VorbisRemarkIter<'a> {
+    self.remarks().into()
   }
 }

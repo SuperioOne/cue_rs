@@ -21,8 +21,9 @@ pub enum Commands {
     #[arg(short, long)]
     output_file: Option<PathBuf>,
 
+    /// Enables Vorbis metadata comments from remarks
     #[arg(short, long)]
-    metadata: Option<MetadataFormat>,
+    metadata: bool,
 
     #[arg(short, long)]
     pretty_print: bool,
@@ -30,12 +31,6 @@ pub enum Commands {
   Query {
     input: OsString,
   },
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
-pub enum MetadataFormat {
-  Vorbis,
-  Id3v2,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]

@@ -1,4 +1,4 @@
-use crate::internal::{lexer::CueLexer, tokenizer::CueTokenizer};
+use crate::internal::{lexer::CueLexer, tokenizer::Tokenizer};
 
 pub struct RemarkIter<'a> {
   lexer: CueLexer<'a>,
@@ -7,7 +7,7 @@ pub struct RemarkIter<'a> {
 impl<'a> RemarkIter<'a> {
   pub(super) const fn new(buffer: &'a str) -> Self {
     Self {
-      lexer: CueLexer::new(CueTokenizer::new(buffer)),
+      lexer: CueLexer::new(Tokenizer::new(buffer)),
     }
   }
 }

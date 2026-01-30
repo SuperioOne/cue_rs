@@ -1,6 +1,6 @@
 use super::{
   enum_str::impl_enum_str,
-  tokenizer::{CueTokenizer, Position},
+  tokenizer::{Position, Tokenizer},
 };
 use crate::{
   core::{
@@ -20,7 +20,7 @@ use core::str::FromStr;
 
 #[derive(Clone)]
 pub struct CueLexer<'a> {
-  tokenizer: CueTokenizer<'a>,
+  tokenizer: Tokenizer<'a>,
   position: Position,
 }
 
@@ -47,7 +47,7 @@ impl_enum_str!(
 );
 
 impl<'a> CueLexer<'a> {
-  pub const fn new(tokenizer: CueTokenizer<'a>) -> Self {
+  pub const fn new(tokenizer: Tokenizer<'a>) -> Self {
     let position = *tokenizer.position();
     Self {
       tokenizer,
@@ -342,9 +342,9 @@ impl<'a> CueLexer<'a> {
   }
 }
 
-impl<'a> From<CueTokenizer<'a>> for CueLexer<'a> {
+impl<'a> From<Tokenizer<'a>> for CueLexer<'a> {
   #[inline]
-  fn from(value: CueTokenizer<'a>) -> Self {
+  fn from(value: Tokenizer<'a>) -> Self {
     Self::new(value)
   }
 }

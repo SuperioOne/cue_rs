@@ -25,13 +25,13 @@ impl<'a> From<CueStr<'a>> for Token<'a> {
 }
 
 #[derive(Clone)]
-pub struct CueTokenizer<'a> {
+pub struct Tokenizer<'a> {
   buffer: &'a str,
   position: Position,
   cursor_index: usize,
 }
 
-impl<'a> CueTokenizer<'a> {
+impl<'a> Tokenizer<'a> {
   pub const fn new(buffer: &'a str) -> Self {
     Self {
       buffer,

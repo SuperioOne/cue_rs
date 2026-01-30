@@ -20,7 +20,7 @@ macro_rules! define_bitflag {
       )+
 
       #[inline]
-      pub const fn as_inner(&self) -> $inner_type {
+      pub const fn into_inner(&self) -> $inner_type {
         self.0
       }
 
@@ -99,6 +99,47 @@ macro_rules! define_bitflag {
       #[inline]
       fn bitxor_assign(&mut self, rhs: Self) {
         self.0 ^= rhs.0;
+      }
+    }
+
+    impl core::ops::Not for $name {
+      type Output = $name;
+
+      #[inline]
+      fn not(self) -> Self::Output {
+        Self(!self.0)
+      }
+    }
+
+    impl core::ops::Shl<$inner_type> for $name {
+      type Output = $name;
+
+      #[inline]
+      fn shl(self, rhs: $inner_type) -> Self::Output {
+        Self(self.0 << rhs)
+      }
+    }
+
+    impl core::ops::Shr<$inner_type> for $name {
+      type Output = $name;
+
+      #[inline]
+      fn shr(self, rhs: u8) -> Self::Output {
+        Self(self.0 >> rhs)
+      }
+    }
+
+    impl core::ops::ShrAssign<$inner_type> for $name {
+      #[inline]
+      fn shr_assign(&mut self, rhs: $inner_type) {
+        self.0 >>= rhs;
+      }
+    }
+
+    impl core::ops::ShlAssign<$inner_type> for $name {
+      #[inline]
+      fn shl_assign(&mut self, rhs: $inner_type) {
+        self.0 <<= rhs;
       }
     }
   };

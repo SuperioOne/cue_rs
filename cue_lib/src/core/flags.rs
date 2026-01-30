@@ -35,3 +35,48 @@ impl core::str::FromStr for TrackFlag {
     Err(FlagParseError)
   }
 }
+
+impl TrackFlag {
+  const fn as_str(&self) -> Option<&'static str> {
+    match *self {
+      TrackFlag::DCP => Some("DCP"),
+      TrackFlag::FOUR_CHANNEL => Some("4CH"),
+      TrackFlag::SCMS => Some("SCMS"),
+      TrackFlag::PRE => Some("PRE"),
+      _ => None,
+    }
+  }
+
+  pub const fn iter(&self) -> TrackFlagNameIter {
+    TrackFlagNameIter {
+      inner: *self,
+      mask: TrackFlag(1),
+    }
+  }
+}
+
+pub struct TrackFlagNameIter {
+  inner: TrackFlag,
+  mask: TrackFlag,
+}
+
+impl Iterator for TrackFlagNameIter {
+  type Item = &'static str;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    const EMPTY: TrackFlag = TrackFlag(0);
+
+    while let flag = (self.inner & self.mask)
+      && self.mask != EMPTY
+    {
+      self.mask <<= 1;
+      let name = flag.as_str();
+
+      if name.is_some() {
+        return name;
+      }
+    }
+
+    None
+  }
+}

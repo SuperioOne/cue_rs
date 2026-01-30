@@ -5,7 +5,7 @@ use crate::{
     cue_str::CueStr,
     flags::TrackFlag,
     timestamp::CueTimeStamp,
-    track::{DataType, IndexNo, Track, TrackIndex, TrackNo},
+    track::{DataType, Track, TrackIndex, TrackNo},
   },
   discid::isrc::Isrc,
   error::{CueLibError, ParseError, ParseErrorKind},
@@ -50,8 +50,14 @@ pub struct TrackProbe<'a> {
   /// Track title (TITLE command)
   pub(super) title: Option<CueStr<'a>>,
 
-  /// Index-level probe data for this track
-  pub(super) index_probe: TrackIndexProbe<'a>,
+  /// Sub-index probe for the track
+  pub(super) sub_index_probe: TrackIndexProbe<'a>,
+
+  /// Track start timestamp (INDEX 01)
+  pub(super) start_index: CueTimeStamp,
+
+  /// Optional timestamp for pregap segment exist in the track file (INDEX 00)
+  pub(super) pregap_index: Option<CueTimeStamp>,
 
   /// Slice containing the complete track portion of the cuesheet
   pub(super) track_buffer: &'a str,
@@ -62,9 +68,9 @@ pub struct Tracks<'a> {
   track: Option<Track>,
 }
 
-pub struct TrackIndexes<'a> {
+pub struct TrackSubIndexes<'a> {
   lexer: CueLexer<'a>,
-  previous_index: Option<TrackIndex>,
+  prev_index: Option<TrackIndex>,
 }
 
 impl<'a> TrackProbe<'a> {
@@ -84,48 +90,64 @@ impl<'a> TrackProbe<'a> {
   }
 
   #[inline]
-  pub const fn isrc(&self) -> Option<&Isrc> {
-    self.isrc.as_ref()
+  pub const fn isrc(&self) -> Option<Isrc> {
+    self.isrc
   }
 
   #[inline]
-  pub const fn flags(&self) -> Option<&TrackFlag> {
-    self.flags.as_ref()
+  pub const fn flags(&self) -> Option<TrackFlag> {
+    self.flags
   }
 
   #[inline]
-  pub const fn postgap(&self) -> Option<&CueTimeStamp> {
-    self.postgap.as_ref()
+  pub const fn postgap(&self) -> Option<CueTimeStamp> {
+    self.postgap
   }
 
   #[inline]
-  pub const fn pregap(&self) -> Option<&CueTimeStamp> {
-    self.pregap.as_ref()
+  pub const fn pregap(&self) -> Option<CueTimeStamp> {
+    self.pregap
   }
 
   #[inline]
-  pub const fn performer(&self) -> Option<&CueStr<'a>> {
-    self.performer.as_ref()
+  pub const fn performer(&self) -> Option<CueStr<'a>> {
+    self.performer
   }
 
   #[inline]
-  pub const fn songwriter(&self) -> Option<&CueStr<'a>> {
-    self.songwriter.as_ref()
+  pub const fn songwriter(&self) -> Option<CueStr<'a>> {
+    self.songwriter
   }
 
   #[inline]
-  pub const fn title(&self) -> Option<&CueStr<'a>> {
-    self.title.as_ref()
+  pub const fn title(&self) -> Option<CueStr<'a>> {
+    self.title
   }
 
   #[inline]
-  pub const fn indexes(&self) -> TrackIndexes<'a> {
-    self.index_probe.iter()
+  pub const fn sub_indexes(&self) -> TrackSubIndexes<'a> {
+    self.sub_index_probe.iter()
+  }
+
+  #[inline]
+  pub const fn start_index(&self) -> CueTimeStamp {
+    self.start_index
+  }
+
+  #[inline]
+  pub const fn pregap_index(&self) -> Option<CueTimeStamp> {
+    self.pregap_index
   }
 
   #[inline]
   pub fn remarks(&self) -> RemarkIter<'a> {
     RemarkIter::new(self.track_buffer)
+  }
+
+  #[cfg(feature = "metadata")]
+  #[inline]
+  pub fn vorbis_comments(&self) -> crate::probe::vorbis_remark::VorbisRemarkIter<'a> {
+    self.remarks().into()
   }
 }
 
@@ -149,10 +171,10 @@ impl<'a> TrackListProbe<'a> {
 
 impl<'a> TrackIndexProbe<'a> {
   #[inline]
-  const fn iter(&self) -> TrackIndexes<'a> {
-    TrackIndexes {
+  const fn iter(&self) -> TrackSubIndexes<'a> {
+    TrackSubIndexes {
       lexer: self.lexer.snapshot(),
-      previous_index: None,
+      prev_index: None,
     }
   }
 }
@@ -169,7 +191,11 @@ impl<'a> Tracks<'a> {
 
       'PARSER: loop {
         match self.lexer.next_command()? {
-          Some(Command::Index { .. }) => Ok(()),
+          Some(Command::Index { value }) => match value.index_no.into_inner() {
+            0 => builder.set_pregap_index(value.timestamp),
+            1 => builder.set_start_index(value.timestamp),
+            _ => Ok(()),
+          },
           Some(Command::Remark { .. }) => Ok(()),
           Some(Command::Flags { value }) => builder.set_flags(value),
           Some(Command::ISRC { value }) => builder.set_isrc(value),
@@ -198,9 +224,9 @@ impl<'a> Tracks<'a> {
         track_buf_end = self.lexer.cursor_position();
       }
 
-      let track_buffer = &self.lexer.as_raw_buffer()[track_buf_start..track_buf_end];
+      let track_buf = &self.lexer.as_raw_buffer()[track_buf_start..track_buf_end];
       let probe = builder
-        .build(track_buffer)
+        .build(track_buf)
         .map_err(|kind| ParseError::new_with_position(kind, self.lexer.position()))?;
 
       return Ok(Some(probe));
@@ -210,24 +236,25 @@ impl<'a> Tracks<'a> {
   }
 }
 
-impl<'a> TrackIndexes<'a> {
+impl<'a> TrackSubIndexes<'a> {
   pub fn next_index(&mut self) -> Result<Option<TrackIndex>, CueLibError> {
-    const START_INDEX: IndexNo = unsafe { IndexNo::new_unchecked(1) };
-
     loop {
       match self.lexer.next_command()? {
         Some(Command::Index { value }) => {
-          let is_valid = match self.previous_index {
-            Some(previous) => {
-              value.index_no == previous.index_no.saturating_add(1)
-                && value.timestamp >= previous.timestamp
+          let is_valid = match self.prev_index {
+            Some(prev) => {
+              value.index_no == prev.index_no.saturating_add(1) && value.timestamp >= prev.timestamp
             }
-            None => value.index_no <= START_INDEX,
+            None => value.index_no.into_inner() <= 1,
           };
 
           if is_valid {
-            self.previous_index = Some(value);
-            return Ok(Some(value));
+            self.prev_index = Some(value);
+
+            match value.index_no.into_inner() {
+              0 | 1 => continue,
+              _ => return Ok(Some(value)),
+            };
           } else {
             let parse_error = ParseError::new_with_line(
               ParseErrorKind::InvalidTrackIndex,
@@ -238,16 +265,7 @@ impl<'a> TrackIndexes<'a> {
           }
         }
         Some(Command::Track { .. }) | None => {
-          if self.previous_index.is_none() {
-            let parse_error = ParseError::new_with_line(
-              ParseErrorKind::InvalidCommandFormat,
-              self.lexer.position().line,
-            );
-
-            return Err(parse_error.into());
-          } else {
-            return Ok(None);
-          }
+          return Ok(None);
         }
         Some(_) => continue,
       }

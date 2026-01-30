@@ -21,15 +21,17 @@ pub struct CueProbeBuilder<'a> {
 }
 
 pub struct TrackProbeBuilder<'a> {
-  track: Track,
   flags: Option<TrackFlag>,
   isrc: Option<Isrc>,
+  performer: Option<CueStr<'a>>,
   postgap: Option<CueTimeStamp>,
   pregap: Option<CueTimeStamp>,
-  performer: Option<CueStr<'a>>,
+  pregap_index: Option<CueTimeStamp>,
   songwriter: Option<CueStr<'a>>,
+  start_index: Option<CueTimeStamp>,
+  sub_index_probe: TrackIndexProbe<'a>,
   title: Option<CueStr<'a>>,
-  index_probe: TrackIndexProbe<'a>,
+  track: Track,
 }
 
 impl<'a> CueProbeBuilder<'a> {
@@ -124,6 +126,7 @@ impl<'a> CueProbeBuilder<'a> {
       .ok_or(ParseErrorKind::MissingTrackCommand)?;
 
     let probe = CueSheetProbe {
+      album_buffer,
       catalog: self.catalog,
       cdtextfile: self.cdtextfile,
       file: self.file,
@@ -131,7 +134,6 @@ impl<'a> CueProbeBuilder<'a> {
       songwriter: self.songwriter,
       title: self.title,
       tracks_probe,
-      album_buffer,
     };
 
     Ok(probe)
@@ -143,7 +145,7 @@ impl<'a> TrackProbeBuilder<'a> {
   pub fn new(index_probe: TrackIndexProbe<'a>, track: Track) -> Self {
     Self {
       track,
-      index_probe,
+      sub_index_probe: index_probe,
       flags: None,
       isrc: None,
       postgap: None,
@@ -151,6 +153,8 @@ impl<'a> TrackProbeBuilder<'a> {
       performer: None,
       songwriter: None,
       title: None,
+      pregap_index: None,
+      start_index: None,
     }
   }
 
@@ -215,6 +219,34 @@ impl<'a> TrackProbeBuilder<'a> {
   }
 
   #[inline]
+  pub const fn set_start_index(&mut self, start_index: CueTimeStamp) -> Result<(), ParseErrorKind> {
+    if self.start_index.is_some() {
+      return Err(ParseErrorKind::MultipleCommand);
+    }
+
+    self.start_index = Some(start_index);
+    Ok(())
+  }
+
+  #[inline]
+  pub const fn set_pregap_index(
+    &mut self,
+    pregap_index: CueTimeStamp,
+  ) -> Result<(), ParseErrorKind> {
+    // Pregap index (INDEX 00) must be set before the start index (INDEX 01)
+    if self.start_index.is_some() {
+      return Err(ParseErrorKind::InvalidTrackIndex);
+    }
+
+    if self.pregap_index.is_some() {
+      return Err(ParseErrorKind::InvalidTrackIndex);
+    }
+
+    self.pregap_index = Some(pregap_index);
+    Ok(())
+  }
+
+  #[inline]
   pub const fn set_title(&mut self, title: CueStr<'a>) -> Result<(), ParseErrorKind> {
     if self.title.is_some() {
       return Err(ParseErrorKind::MultipleCommand);
@@ -225,16 +257,20 @@ impl<'a> TrackProbeBuilder<'a> {
   }
 
   pub fn build(self, track_buffer: &'a str) -> Result<TrackProbe<'a>, ParseErrorKind> {
+    let start_index = self.start_index.ok_or(ParseErrorKind::InvalidTrackIndex)?;
+
     let probe = TrackProbe {
-      track: self.track,
       flags: self.flags,
       isrc: self.isrc,
+      performer: self.performer,
       postgap: self.postgap,
       pregap: self.pregap,
-      performer: self.performer,
+      pregap_index: self.pregap_index,
       songwriter: self.songwriter,
+      start_index,
+      sub_index_probe: self.sub_index_probe,
       title: self.title,
-      index_probe: self.index_probe,
+      track: self.track,
       track_buffer,
     };
 

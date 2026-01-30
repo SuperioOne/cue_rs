@@ -1,67 +1,74 @@
-use super::Command;
-use crate::{
-  args::{MetadataFormat, VerboseLevel},
-  cli_error::ErrorFormat,
+use self::{
+  error::ConvertError,
+  metadata::{MetadataMap, metadata_from_remarks},
 };
+
+use super::Command;
 use cue_lib::{
-  error::CueLibError,
-  probe::{CueSheetProbe, track::TrackIndexes},
+  core::{
+    album_file::AlbumFile,
+    cue_str::CueStr,
+    flags::TrackFlag,
+    timestamp::CueTimeStamp,
+    track::{DataType, TrackNo},
+  },
+  discid::isrc::Isrc,
+  probe::{
+    CueSheetProbe,
+    track::{TrackSubIndexes, Tracks},
+  },
 };
 use serde::Serialize;
 use std::{
-  borrow::Cow,
   fs::OpenOptions,
   io::{BufWriter, stdout},
   path::PathBuf,
 };
 
+mod error;
+mod metadata;
+
 pub struct ConvertCommand<'a> {
   cuesheet: &'a str,
-  allow_metadata_remarks: Option<MetadataFormat>,
+  allow_metadata_remarks: bool,
   output_file: Option<PathBuf>,
   pretty_print: bool,
 }
 
 #[derive(Serialize)]
-pub struct CueSheet<'a> {
-  pub catalog: Option<Cow<'a, str>>,
-  pub cdtextfile: Option<Cow<'a, str>>,
-  pub file: Option<Cow<'a, str>>,
-  pub file_type: Option<&'a str>,
-  pub performer: Option<Cow<'a, str>>,
-  pub songwriter: Option<Cow<'a, str>>,
-  pub title: Option<Cow<'a, str>>,
+struct CueSheet<'a> {
+  pub catalog: Option<CueStr<'a>>,
+  pub cdtextfile: Option<CueStr<'a>>,
+  pub file: Option<AlbumFile<'a>>,
+  pub performer: Option<CueStr<'a>>,
+  pub remark_metadata: Option<MetadataMap<'a>>,
+  pub songwriter: Option<CueStr<'a>>,
+  pub title: Option<CueStr<'a>>,
   pub tracks: Vec<TrackInfo<'a>>,
 }
 
 #[derive(Serialize)]
-pub struct TrackInfo<'a> {
-  pub data_type: &'a str,
-  pub flags: Option<Vec<&'static str>>,
-  pub isrc: Option<String>,
-  pub performer: Option<Cow<'a, str>>,
-  pub postgap: Option<u128>,
-  pub pregap: Option<u128>,
-  pub songwriter: Option<Cow<'a, str>>,
-  pub sub_indexes: Option<Vec<u128>>,
+struct TrackInfo<'a> {
+  pub data_type: DataType,
+  pub flags: Option<TrackFlag>,
+  pub isrc: Option<Isrc>,
+  pub performer: Option<CueStr<'a>>,
+  pub postgap: Option<CueTimeStamp>,
+  pub pregap: Option<CueTimeStamp>,
+  pub remark_metadata: Option<MetadataMap<'a>>,
+  pub songwriter: Option<CueStr<'a>>,
+  pub sub_indexes: Option<Vec<CueTimeStamp>>,
   pub time_info: TimeInfo,
-  pub title: Option<Cow<'a, str>>,
-  pub track_no: u8,
+  pub title: Option<CueStr<'a>>,
+  pub track_no: TrackNo,
 }
 
 #[derive(Serialize, Default)]
-pub struct TimeInfo {
+struct TimeInfo {
   start: u128,
   end: Option<u128>,
   pregap_start: Option<u128>,
   duration: Option<u128>,
-}
-
-pub enum ConvertError {
-  CueLibError(CueLibError),
-  IOError(std::io::Error),
-  JsonSerializeError(serde_json::error::Error),
-  IndexError,
 }
 
 impl<'a> ConvertCommand<'a> {
@@ -70,7 +77,7 @@ impl<'a> ConvertCommand<'a> {
     Self {
       cuesheet,
       pretty_print: false,
-      allow_metadata_remarks: None,
+      allow_metadata_remarks: false,
       output_file: None,
     }
   }
@@ -82,7 +89,7 @@ impl<'a> ConvertCommand<'a> {
   }
 
   #[inline]
-  pub const fn set_metadata_remarks(mut self, value: Option<MetadataFormat>) -> Self {
+  pub const fn set_metadata_remarks(mut self, value: bool) -> Self {
     self.allow_metadata_remarks = value;
     self
   }
@@ -94,85 +101,53 @@ impl<'a> ConvertCommand<'a> {
   }
 
   #[inline]
-  fn process_cuesheet(&self) -> Result<CueSheet<'a>, ConvertError> {
-    let probe = CueSheetProbe::new(self.cuesheet)?;
-    let mut cuesheet = CueSheet {
-      catalog: probe.catalog().map(|v| v.into()),
-      cdtextfile: probe.cdtextfile().map(|v| v.into()),
-      file: probe.file_info().map(|v| v.name.into()),
-      file_type: probe.file_info().map(|v| v.file_type.as_str()),
-      performer: probe.performer().map(|v| v.into()),
-      songwriter: probe.songwriter().map(|v| v.into()),
-      title: probe.album_title().map(|v| v.into()),
-      tracks: Vec::new(),
-    };
-
-    Self::process_tracks(&probe, &mut cuesheet)?;
-
-    Ok(cuesheet)
-  }
-
-  #[inline]
   fn process_tracks(
-    probe: &CueSheetProbe<'a>,
-    cuesheet: &mut CueSheet<'a>,
-  ) -> Result<(), ConvertError> {
-    let mut track_probe = probe.tracks();
-
+    &self,
+    mut cuesheet: CueSheet<'a>,
+    mut track_probe: Tracks<'a>,
+  ) -> Result<CueSheet<'a>, ConvertError> {
     while let Some(track) = track_probe.next_track()? {
       let mut track_info = TrackInfo {
-        data_type: track.track_data_type().as_str(),
-        flags: None,
-        isrc: track.isrc().map(|v| v.to_string()),
-        performer: track.performer().map(|v| v.into()),
-        postgap: track.postgap().map(|v| v.as_millis()),
-        pregap: track.pregap().map(|v| v.as_millis()),
-        songwriter: track.songwriter().map(|v| v.into()),
+        data_type: track.track_data_type(),
+        flags: track.flags(),
+        isrc: track.isrc(),
+        performer: track.performer(),
+        postgap: track.postgap(),
+        pregap: track.pregap(),
+        remark_metadata: None,
+        songwriter: track.songwriter(),
         sub_indexes: None,
-        time_info: TimeInfo::default(),
-        title: track.title().map(|v| v.into()),
-        track_no: track.track_no().into_inner(),
+        time_info: TimeInfo {
+          start: track.start_index().as_millis(),
+          pregap_start: track.pregap_index().map(|v| v.as_millis()),
+          end: None,
+          duration: None,
+        },
+        title: track.title(),
+        track_no: track.track_no(),
       };
 
-      Self::process_indexes(&mut track_info, track.indexes())?;
+      Self::process_sub_indexes(&mut track_info, track.sub_indexes())?;
+
+      if self.allow_metadata_remarks {
+        track_info.remark_metadata = metadata_from_remarks(track.vorbis_comments());
+      }
+
       cuesheet.tracks.push(track_info);
     }
 
     Self::calc_track_times(&mut cuesheet.tracks);
 
-    Ok(())
+    Ok(cuesheet)
   }
 
-  fn process_indexes(
+  fn process_sub_indexes(
     track: &mut TrackInfo<'a>,
-    mut indexes: TrackIndexes<'a>,
+    mut indexes: TrackSubIndexes<'a>,
   ) -> Result<(), ConvertError> {
-    match indexes.next_index()? {
-      Some(index) => match index.index_no.as_ref() {
-        0 => {
-          track.time_info.pregap_start = Some(index.timestamp.as_millis());
-
-          if let Some(start) = indexes.next_index()?
-            && *start.index_no.as_ref() == 1u8
-          {
-            track.time_info.start = start.timestamp.as_millis();
-          } else {
-            return Err(ConvertError::IndexError);
-          }
-        }
-        1 => {
-          track.time_info.start = index.timestamp.as_millis();
-        }
-        _ => return Err(ConvertError::IndexError),
-      },
-      None => {
-        return Err(ConvertError::IndexError);
-      }
-    };
-
     let mut sub_indexes = Vec::new();
     while let Some(index) = indexes.next_index()? {
-      sub_indexes.push(index.timestamp.as_millis());
+      sub_indexes.push(index.timestamp);
     }
 
     if !sub_indexes.is_empty() {
@@ -205,7 +180,24 @@ impl<'a> Command for &'a ConvertCommand<'a> {
   type Error = ConvertError;
 
   fn run(self) -> Result<(), ConvertError> {
-    let cuesheet = self.process_cuesheet()?;
+    let probe = CueSheetProbe::new(self.cuesheet)?;
+    let mut cuesheet = CueSheet {
+      catalog: probe.catalog(),
+      cdtextfile: probe.cdtextfile(),
+      file: probe.file_info(),
+      performer: probe.performer(),
+      remark_metadata: None,
+      songwriter: probe.songwriter(),
+      title: probe.album_title(),
+      tracks: Vec::new(),
+    };
+
+    if self.allow_metadata_remarks {
+      cuesheet.remark_metadata = metadata_from_remarks(probe.vorbis_comments());
+    }
+
+    let cuesheet = self.process_tracks(cuesheet, probe.tracks())?;
+
     let target_stream: Box<dyn std::io::Write> = match self.output_file.as_ref() {
       Some(path) => {
         let fd = OpenOptions::new()
@@ -228,48 +220,5 @@ impl<'a> Command for &'a ConvertCommand<'a> {
     }
 
     Ok(())
-  }
-}
-
-impl From<CueLibError> for ConvertError {
-  #[inline]
-  fn from(value: CueLibError) -> Self {
-    Self::CueLibError(value)
-  }
-}
-
-impl From<serde_json::error::Error> for ConvertError {
-  #[inline]
-  fn from(value: serde_json::error::Error) -> Self {
-    Self::JsonSerializeError(value)
-  }
-}
-
-impl From<std::io::Error> for ConvertError {
-  #[inline]
-  fn from(value: std::io::Error) -> Self {
-    Self::IOError(value)
-  }
-}
-
-impl ErrorFormat for ConvertError {
-  fn fmt(
-    &self,
-    f: &mut std::fmt::Formatter<'_>,
-    _: &str,
-    verbose_level: crate::args::VerboseLevel,
-  ) -> std::fmt::Result {
-    if verbose_level == VerboseLevel::Quiet {
-      Ok(())
-    } else {
-      match self {
-        ConvertError::IndexError => {
-          f.write_str("unhandled logic error, expected an index command but received nothing")
-        }
-        ConvertError::CueLibError(error) => std::fmt::Display::fmt(&error, f),
-        ConvertError::IOError(error) => std::fmt::Display::fmt(&error, f),
-        ConvertError::JsonSerializeError(error) => std::fmt::Display::fmt(&error, f),
-      }
-    }
   }
 }
