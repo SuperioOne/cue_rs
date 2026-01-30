@@ -14,5 +14,4 @@ edition = "2024"
 authors = ["Timur Olur <pm@smdd.dev>"]
 documentation = "https://github.com/SuperioOne/cue_rs"
 homepage = "https://github.com/SuperioOne/cue_rs"
-license = "Apache-2.0"
 repository = "https://github.com/SuperioOne/cue_rs"
